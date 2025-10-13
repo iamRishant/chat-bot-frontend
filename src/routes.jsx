@@ -1,9 +1,9 @@
 // src/routes.js
 import React, { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import NotFound from './Components/NotFound';
-import AuthSlider from './Components/AuthSlider';
-import ChatBot from './Pages/ChatBot';
+import NotFound from './Components/NotFound.jsx';
+import AuthSlider from './Components/AuthSlider.jsx';
+import ChatBot from './Pages/ChatBot.jsx';
 
 // Lazy-loaded components
 // const Home = lazy(() => import('./pages/Home'));

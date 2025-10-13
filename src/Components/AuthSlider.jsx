@@ -1,7 +1,7 @@
 // src/components/AuthSlider.jsx
 import React, { useState } from 'react';
-import LoginForm from '../Pages/LoginForm';
-import SignupForm from '../Pages/SignUpForm';
+import LoginForm from '../Pages/LoginForm.jsx';
+import SignupForm from '../Pages/SignUpForm.jsx';
 
 
 const AuthSlider = () => {
