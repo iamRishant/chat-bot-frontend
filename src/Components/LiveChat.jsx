@@ -1,115 +1,210 @@
-// src/components/LiveChat.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 
-const LiveChat = () => {
-    const [messages, setMessages] = useState([]);
-    const [input, setInput] = useState('');
-    const ws = useRef(null); // Ref to hold the WebSocket instance
-    const messagesEndRef = useRef(null);
-    const userId = "user" + Math.random().toString(36).substring(7); // A simple, temporary user ID
+const LiveChat = ({ isOpen, onClose, username }) => {
+  const [socket, setSocket] = useState(null);
+  const [liveMessages, setLiveMessages] = useState([]);
+  const [liveInput, setLiveInput] = useState('');
+  const [connectedUsers, setConnectedUsers] = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const messagesEndRef = useRef(null);
 
-    useEffect(() => {
-        // Establish WebSocket connection
-        ws.current = new WebSocket("ws://localhost:8080"); // Change this to your server's WebSocket URL
+  useEffect(() => {
+    if (isOpen) {
+      // Initialize socket connection
+      const newSocket = io(import.meta.env.VITE_BACKEND_SOCKET_API_URL); // Your backend URL
+      setSocket(newSocket);
 
-        ws.current.onopen = () => {
-            console.log("WebSocket connection opened.");
-        };
+      // Join chat
+      newSocket.emit('join_chat', { username });
 
-        // Listen for incoming messages from the server
-        ws.current.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            setMessages(prev => [...prev, message]);
-        };
+      // Listen for messages
+      newSocket.on('new_live_message', (message) => {
+        setLiveMessages(prev => [...prev, message]);
+      });
 
-        ws.current.onclose = () => {
-            console.log("WebSocket connection closed.");
-        };
+      newSocket.on('users_list', (users) => {
+        setConnectedUsers(users);
+      });
 
-        ws.current.onerror = (error) => {
-            console.error("WebSocket error:", error);
-        };
+      newSocket.on('user_joined', (data) => {
+        setLiveMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          type: 'system',
+          text: data.message,
+          timestamp: new Date()
+        }]);
+      });
 
-        // Clean up the WebSocket connection when the component unmounts
-        return () => {
-            ws.current.close();
-        };
-    }, []); // Empty dependency array ensures this effect runs only once
+      newSocket.on('user_left', (data) => {
+        setLiveMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          type: 'system',
+          text: data.message,
+          timestamp: new Date()
+        }]);
+      });
 
-    // Auto-scroll to the latest message
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+      newSocket.on('user_typing', (data) => {
+        setTypingUsers(prev => {
+          if (!prev.find(user => user.userId === data.userId)) {
+            return [...prev, data];
+          }
+          return prev;
+        });
+      });
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!input.trim() || !ws.current) return;
+      newSocket.on('user_stop_typing', (data) => {
+        setTypingUsers(prev => prev.filter(user => user.userId !== data.userId));
+      });
 
-        const newMessage = {
-            text: input,
-            sender: userId,
-            timestamp: new Date().toISOString()
-        };
+      return () => {
+        newSocket.disconnect();
+      };
+    }
+  }, [isOpen, username]);
 
-        // Send the message to the server via WebSocket
-        ws.current.send(JSON.stringify(newMessage));
-        
-        setInput('');
-    };
+  useEffect(() => {
+    scrollToBottom();
+  }, [liveMessages, typingUsers]);
 
-    return (
-        <div className="flex-1 bg-white rounded-2xl shadow-sm border p-4 mb-4 flex flex-col">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Live Group Chat 💬</h2>
-            <div className="flex-1 overflow-y-auto space-y-4 max-h-[60vh]">
-                {messages.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-gray-500">
-                        Start the conversation!
-                    </div>
-                ) : (
-                    messages.map((message, index) => (
-                        <div
-                            key={index}
-                            className={`flex ${message.sender === userId ? 'justify-end' : 'justify-start'}`}
-                        >
-                            <div
-                                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                                    message.sender === userId
-                                        ? 'bg-green-500 text-white rounded-br-none'
-                                        : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                                }`}
-                            >
-                                <div className="font-bold text-sm mb-1">{message.sender === userId ? 'You' : message.sender}</div>
-                                <div className="whitespace-pre-wrap">{message.text}</div>
-                                <div className="text-xs mt-2 text-gray-400">
-                                    {new Date(message.timestamp).toLocaleTimeString([], {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                )}
-                <div ref={messagesEndRef} />
-            </div>
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-            <form onSubmit={handleSubmit} className="mt-4 flex space-x-2">
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Type a group message..."
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button
-                    type="submit"
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-green-600 text-white rounded-xl hover:from-blue-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
-                >
-                    Send
-                </button>
-            </form>
+  const sendLiveMessage = (e) => {
+    e.preventDefault();
+    if (!liveInput.trim() || !socket) return;
+
+    socket.emit('live_message', {
+      text: liveInput
+    });
+
+    setLiveInput('');
+    socket.emit('typing_stop');
+  };
+
+  const handleTyping = () => {
+    if (socket) {
+      socket.emit('typing_start');
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setLiveInput(e.target.value);
+    handleTyping();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 w-80 h-96 bg-white rounded-2xl shadow-2xl border flex flex-col z-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-t-2xl flex justify-between items-center">
+        <div>
+          <h3 className="font-bold">Live Chat</h3>
+          <p className="text-xs text-green-100">
+            {connectedUsers.length} users online
+          </p>
         </div>
-    );
+        <button
+          onClick={onClose}
+          className="text-white hover:text-green-200 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
+        <div className="space-y-3">
+          {liveMessages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${
+                message.type === 'system' 
+                  ? 'justify-center' 
+                  : message.userId === socket?.id 
+                    ? 'justify-end' 
+                    : 'justify-start'
+              }`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl px-3 py-2 ${
+                  message.type === 'system'
+                    ? 'bg-yellow-100 text-yellow-800 text-xs italic'
+                    : message.userId === socket?.id
+                    ? 'bg-green-500 text-white rounded-br-none'
+                    : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
+                }`}
+              >
+                {message.type !== 'system' && message.userId !== socket?.id && (
+                  <div className="text-xs font-medium text-green-600 mb-1">
+                    {message.username}
+                  </div>
+                )}
+                <div className="text-sm">{message.text}</div>
+                <div
+                  className={`text-xs mt-1 ${
+                    message.type === 'system'
+                      ? 'text-yellow-600'
+                      : message.userId === socket?.id
+                      ? 'text-green-200'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {new Date(message.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          {/* Typing indicators */}
+          {typingUsers.map((user) => (
+            <div key={user.userId} className="flex justify-start">
+              <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-none px-3 py-2">
+                <div className="text-xs text-gray-500 mb-1">{user.username} is typing</div>
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input */}
+      <form onSubmit={sendLiveMessage} className="p-3 border-t">
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            value={liveInput}
+            onChange={handleInputChange}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+          />
+          <button
+            type="submit"
+            disabled={!liveInput.trim()}
+            className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 };
 
 export default LiveChat;

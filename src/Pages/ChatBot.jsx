@@ -200,11 +200,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useNavigate } from 'react-router-dom';
+import LiveChat from '../Components/LiveChat';
 
 const ChatBot = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showLiveChat, setShowLiveChat] = useState(false);
+  const [username, setUsername] = useState('');
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   
@@ -215,6 +218,16 @@ const ChatBot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('chatUsername');
+    if (savedUsername) {
+      setUsername(savedUsername);
+    } else {
+      const user = prompt('Please enter your name for the live chat:') || 'Anonymous';
+      setUsername(user);
+      localStorage.setItem('chatUsername', user);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -247,6 +260,12 @@ const ChatBot = () => {
         timestamp: new Date() 
       };
       setMessages(prev => [...prev, aiMessage]);
+      if (messages.length === 0) {
+        setTimeout(() => {
+          setShowLiveChat(true);
+        }, 1000);
+      }
+
     } catch (error) {
       console.error('Error:', error);
       const errorMessage = { 
@@ -288,10 +307,21 @@ const ChatBot = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800">Hafiz Chat Bot</h1>
-              <p className="text-sm text-gray-500">Powered by Gemini 2.5 Flash</p>
+              <p className="text-sm text-gray-500">Welcome, {username}!</p>
+              {/* <p className="text-sm text-gray-500">Powered by Gemini 2.5 Flash</p> */}
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            {/* Live Chat Toggle Button */}
+            <button
+              onClick={() => setShowLiveChat(!showLiveChat)}
+              className="px-4 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors font-medium flex items-center space-x-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <span>Live Chat</span>
+            </button>
             <button
               onClick={clearChat}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -404,11 +434,16 @@ const ChatBot = () => {
               )}
             </button>
           </div>
-          <div className="mt-2 text-xs text-gray-500 text-center">
+          {/* <div className="mt-2 text-xs text-gray-500 text-center">
             Gemini 2.5 Flash • Press Enter to send
-          </div>
+          </div> */}
         </form>
       </div>
+      <LiveChat
+        isOpen={showLiveChat}
+        onClose={()=>setShowLiveChat(false)}
+        username={username}
+        />
     </div>
   );
 }
